@@ -1,101 +1,128 @@
-# 🏥 SISTEMA DE MIGRACIÓN DE SALUD PLUS
-### Arquitectura Dual: PostgreSQL + MongoDB + Express API
+# SaludPlus API – Hybrid Persistence Architecture
 
-Este proyecto implementa un flujo completo de **ETL** (Extract, Transform, Load) para procesar datos médicos desde un archivo CSV hacia dos motores de base de datos simultáneos, exponiendo la información mediante una **API REST**.
+## Project Overview
 
----
+SaludPlus API is a backend system that replaces a legacy CSV-based storage model with a scalable and maintainable hybrid persistence architecture.
 
-##  ENDPOINTS DE LA API (Pruebas en Postman)
+The system combines:
 
-Una vez que el servidor esté corriendo, puedes usar estas URLs en **Postman**:
+- PostgreSQL for relational, transactional, and integrity-critical data
+- MongoDB for read-optimized patient history documents
+- Node.js and Express for REST API development
 
-* **Listar Pacientes (PostgreSQL):**
-    `GET http://localhost:3000/api/patients`
-    *Devuelve los datos estructurados y normalizados de la tabla SQL.*
-
-* **Listar Historiales (MongoDB):**
-    `GET http://localhost:3000/api/histories`
-    *Devuelve los documentos NoSQL con historiales médicos anidados.*
+This architecture ensures data consistency, high performance, and scalability.
 
 ---
 
-##  TECNOLOGÍAS Y HERRAMIENTAS
-* **Backend:** Node.js con Express.js.
-* **Base de Datos Relacional:** PostgreSQL (Normalización de tablas).
-* **Base de Datos NoSQL:** MongoDB (Esquemas de documentos complejos).
-* **Gestión de Datos:** `csv-parse` para lectura de archivos planos.
-* **Testing:** Postman Desktop Agent.
+# Technologies Used
+
+- Node.js 18+
+- Express.js 4.x
+- PostgreSQL 12+
+- MongoDB 6+
+- npm
+- Postman (for API testing)
 
 ---
 
-## BITÁCORA DE COMANDOS (Guía de ejecución)
+# Architecture Decisions
 
+## Why Hybrid Architecture?
 
+The system manages two different types of data:
 
-### 1. Gestión de Versiones (Git)
-Durante el desarrollo se utilizaron los siguientes comandos para el control de versiones:
+| Data Type | Requirements | Engine |
+|------------|--------------|--------|
+| Patients, Doctors, Insurances | Strong consistency, uniqueness, relationships | PostgreSQL |
+| Appointments & Financial Data | ACID transactions, precise aggregations | PostgreSQL |
+| Patient Histories (read-heavy) | Fast retrieval, no joins, flexible schema | MongoDB |
 
-```bash
-# Iniciar el repositorio
-git init
+PostgreSQL acts as the **source of truth**.
 
-# Preparar y guardar cambios
-git add .
-git commit -m "Instalación de Express y configuración de servidor"
+MongoDB stores **denormalized read models** optimized for performance.
 
-# Verificar estado
-git status
-git log --oneline
+---
 
+# PostgreSQL Design
 
+## Normalization
 
-## Configuración del Entorno
+The relational schema follows:
 
-### Instalación de dependencias necesarias
-npm install express pg mongoose dotenv csv-parse
+- 1NF – Atomic columns
+- 2NF – No partial dependencies
+- 3NF – No transitive dependencies
 
-# Entrar a la carpeta del proyecto
-cd saludplus
+## Tables
 
+### patients
+- id (Primary Key)
+- name
+- email (Unique)
+- phone
+- address
+- created_at
 
+### doctors
+- id (Primary Key)
+- name
+- email (Unique)
+- specialty
+- created_at
 
+### insurances
+- id (Primary Key)
+- name (Unique)
+- coverage_percentage
 
-## Ejecución del Servidor
+### appointments
+- id (Primary Key)
+- appointment_id (Unique)
+- appointment_date
+- patient_id (Foreign Key → patients.id)
+- doctor_id (Foreign Key → doctors.id)
+- insurance_id (Foreign Key → insurances.id)
+- treatment_code
+- treatment_description
+- treatment_cost
+- amount_paid
+- created_at
 
-# Iniciar migración y levantar API
-npm start
+## Indexes
 
+- patients.email
+- doctors.email
+- appointments.appointment_date
+- appointments.patient_id
+- appointments.insurance_id
 
-## ESTRUCTURA DEL PROYECTO 
+---
 
-saludplus/
-├── data/
-│   └── datos.csv           # Fuente de datos original (100 registros)
-├── src/
-│   ├── config/
-│   │   ├── postgres.js     # Conexión y creación de tablas SQL
-│   │   └── mongodb.js      # Conexión y Modelos NoSQL (Mongoose)
-│   ├── services/
-│   │   └── migrationService.js # Lógica de transformación y carga
-│   └── server.js           # Express API y puntos de entrada
-├── .env                    # Variables de entorno (Privado)
-├── package.json            # Scripts y dependencias
-└── README.md               # Documentación profesional
+# MongoDB Design
 
+## Collection: patient_histories
 
+Each document stores the full appointment history of a patient.
 
+Example structure:
 
-## CONFIGURACIÓN DE VARIABLES (.env)
-
-# Para conectar las bases de datos, el archivo .env debe tener esta estructura:
-DB_USER=tu_usuario
-DB_HOST=localhost
-DB_PASSWORD=tu_clave
-DB_NAME=saludplus
-DB_PORT=5432
-MONGO_URI=mongodb://localhost:27017/saludplus
-
-
-
-Desarrollado por: Andrea Lizcano BY riwi
-Fecha: Febrero 2026
+```json
+{
+  "patientEmail": "valeria.g@mail.com",
+  "patientName": "Valeria Gomez",
+  "appointments": [
+    {
+      "appointmentId": "APT-1001",
+      "date": "2024-01-07",
+      "doctorName": "Dr. Carlos Ruiz",
+      "doctorEmail": "c.ruiz@saludplus.com",
+      "specialty": "Cardiology",
+      "treatmentCode": "TRT-007",
+      "treatmentDescription": "Skin Treatment",
+      "treatmentCost": 200000,
+      "insuranceProvider": "ProteccionMedica",
+      "coveragePercentage": 60,
+      "amountPaid": 80000
+    }
+  ]
+}
